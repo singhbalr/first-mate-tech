@@ -11,22 +11,37 @@ export default function Home() {
   const [unit, setUnit] = useState<string>('minutes');
   const [message, setMessage] = useState<string>('');
   const [webhookUrl, setWebhookUrl] = useState<string>('');
-  const [buttonText, setButtonText] = useState<string>('Send');
   const [isSending, setIsSending] = useState<boolean>(false);
+  const [remainingTime, setRemainingTime] = useState<number>(0);
 
   useEffect(() => {
-    if (delay && !isNaN(Number(delay))) {
-      setButtonText(`Send in ${delay} ${unit}`);
-    } else {
-      setButtonText('Send');
+    let countdownInterval: NodeJS.Timeout;
+    
+    if (remainingTime > 0) {
+      countdownInterval = setInterval(() => {
+        setRemainingTime((prev) => {
+          if (prev <= 1) {
+            clearInterval(countdownInterval);
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
     }
-  }, [delay, unit]);
+
+    return () => {
+      if (countdownInterval) {
+        clearInterval(countdownInterval);
+      }
+    };
+  }, [remainingTime]);
 
   const handleSend = async () => {
     if (!delay || !message || !webhookUrl) return;
 
     setIsSending(true);
-    const delayInMs = Number(delay) * (unit === 'seconds' ? 1000 : unit === 'minutes' ? 60000 : 3600000);
+    const delayInSeconds = Number(delay) * (unit === 'seconds' ? 1 : unit === 'minutes' ? 60 : 3600);
+    setRemainingTime(delayInSeconds);
     
     setTimeout(async () => {
       try {
@@ -51,17 +66,30 @@ export default function Home() {
         setDelay('');
         setMessage('');
         setWebhookUrl('');
-        setButtonText('Send');
+        setRemainingTime(0);
       } catch (error) {
         console.error('Error sending message:', error);
         alert('Failed to send message. Please check your webhook URL and try again.');
       } finally {
         setIsSending(false);
       }
-    }, delayInMs);
+    }, delayInSeconds * 1000);
   };
 
   const isFormValid = delay !== '' && message !== '' && webhookUrl !== '';
+
+  const getButtonText = () => {
+    if (isSending && remainingTime > 0) {
+      return `Sending in ${remainingTime} seconds...`;
+    }
+    if (isSending) {
+      return 'Sending...';
+    }
+    if (delay && !isNaN(Number(delay))) {
+      return `Send in ${delay} ${unit}`;
+    }
+    return 'Send';
+  };
 
   return (
     <main className="min-h-screen p-8 flex items-center justify-center bg-gray-50">
@@ -79,8 +107,9 @@ export default function Home() {
                 value={delay}
                 onChange={(e: ChangeEvent<HTMLInputElement>) => setDelay(e.target.value)}
                 min="1"
+                disabled={isSending}
               />
-              <Select value={unit} onValueChange={setUnit}>
+              <Select value={unit} onValueChange={setUnit} disabled={isSending}>
                 <SelectTrigger className="w-[120px]">
                   <SelectValue placeholder="Select unit" />
                 </SelectTrigger>
@@ -99,6 +128,7 @@ export default function Home() {
               placeholder="Enter your message"
               value={message}
               onChange={(e: ChangeEvent<HTMLInputElement>) => setMessage(e.target.value)}
+              disabled={isSending}
             />
           </div>
 
@@ -108,6 +138,7 @@ export default function Home() {
               placeholder="Enter webhook URL"
               value={webhookUrl}
               onChange={(e: ChangeEvent<HTMLInputElement>) => setWebhookUrl(e.target.value)}
+              disabled={isSending}
             />
           </div>
 
@@ -116,7 +147,7 @@ export default function Home() {
             onClick={handleSend}
             disabled={!isFormValid || isSending}
           >
-            {isSending ? 'Sending...' : buttonText}
+            {getButtonText()}
           </Button>
         </CardContent>
       </Card>
